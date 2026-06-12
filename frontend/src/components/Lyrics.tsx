@@ -92,9 +92,16 @@ export const Lyrics = () => {
   useEffect(() => {
     if (containerRef.current && currentLine >= 0) {
       const lineElements = containerRef.current.querySelectorAll('.lyric-line');
-      const currentElement = lineElements[currentLine];
+      const currentElement = lineElements[currentLine] as HTMLElement;
+      const container = containerRef.current;
       if (currentElement) {
-        currentElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const containerHeight = container.clientHeight;
+        const lineTop = currentElement.offsetTop;
+        const lineHeight = currentElement.offsetHeight;
+        container.scrollTo({
+          top: lineTop - containerHeight / 2 + lineHeight / 2,
+          behavior: 'smooth',
+        });
       }
     }
   }, [currentLine]);
