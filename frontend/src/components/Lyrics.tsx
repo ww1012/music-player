@@ -54,26 +54,35 @@ export const Lyrics = () => {
       return;
     }
 
+    const controller = new AbortController();
     setIsLoading(true);
-    
-    fetch(`http://localhost:5000/api/lyrics/search?q=${encodeURIComponent(state.currentSong.title)}`)
+
+    fetch(
+      `http://localhost:5000/api/lyrics/search?q=${encodeURIComponent(state.currentSong.title)}`,
+      { signal: controller.signal }
+    )
       .then(res => res.json())
       .then(data => {
         if (data.success && data.lyrics) {
           const parsed = parseLyrics(data.lyrics);
-          if (parsed.length > 0) {
-            setLyrics(parsed);
-          } else {
-            setLyrics([]);
-          }
+          setLyrics(parsed);
+        } else {
+          setLyrics([]);
         }
       })
-      .catch(() => {
-        setLyrics([]);
+      .catch(err => {
+        if (err.name !== 'AbortError') {
+          setLyrics([]);
+        }
       })
       .finally(() => {
-        setIsLoading(false);
+        if (!controller.signal.aborted) {
+          setIsLoading(false);
+        }
       });
+
+    // 切歌或卸载时取消在途请求，避免旧请求覆盖新歌词或用户上传的歌词
+    return () => controller.abort();
   }, [state.currentSong]);
 
   useEffect(() => {

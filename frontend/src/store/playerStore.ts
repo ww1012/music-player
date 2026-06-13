@@ -23,6 +23,9 @@ export interface PlayerState {
   volume: number;
   playbackMode: 'single' | 'list' | 'random';
   currentTime: number;
+  equalizerEnabled: boolean;
+  // 5 段（60Hz / 230Hz / 910Hz / 4kHz / 14kHz），0-100 范围，50=中性
+  equalizerBands: number[];
 }
 
 type PlayerAction =
@@ -35,7 +38,9 @@ type PlayerAction =
   | { type: 'SET_CURRENT_TIME'; payload: number }
   | { type: 'ADD_SONG'; payload: Song }
   | { type: 'REMOVE_SONG'; payload: string }
-  | { type: 'TOGGLE_FAVORITE'; payload: string };
+  | { type: 'TOGGLE_FAVORITE'; payload: string }
+  | { type: 'SET_EQUALIZER_ENABLED'; payload: boolean }
+  | { type: 'SET_EQUALIZER_BANDS'; payload: number[] };
 
 const initialState: PlayerState = {
   currentSong: null,
@@ -45,14 +50,24 @@ const initialState: PlayerState = {
   volume: 80,
   playbackMode: 'list',
   currentTime: 0,
+  equalizerEnabled: false,
+  equalizerBands: [50, 50, 50, 50, 50],
 };
 
 function playerReducer(state: PlayerState, action: PlayerAction): PlayerState {
   switch (action.type) {
     case 'SET_SONGS':
       return { ...state, songs: action.payload };
-    case 'SET_CURRENT_SONG':
-      return { ...state, currentSong: action.payload, progress: 0, currentTime: 0 };
+    case 'SET_CURRENT_SONG': {
+      const isSameSong = state.currentSong?.id === action.payload?.id;
+      return {
+        ...state,
+        currentSong: action.payload,
+        // 只有真正切歌时才把进度归零，重新选中正在播的歌不应让进度条跳回 0
+        progress: isSameSong ? state.progress : 0,
+        currentTime: isSameSong ? state.currentTime : 0,
+      };
+    }
     case 'TOGGLE_PLAY':
       return { ...state, isPlaying: !state.isPlaying };
     case 'SET_PROGRESS':
@@ -77,6 +92,10 @@ function playerReducer(state: PlayerState, action: PlayerAction): PlayerState {
           ? { ...state.currentSong, isFavorite: !state.currentSong.isFavorite }
           : state.currentSong,
       };
+    case 'SET_EQUALIZER_ENABLED':
+      return { ...state, equalizerEnabled: action.payload };
+    case 'SET_EQUALIZER_BANDS':
+      return { ...state, equalizerBands: action.payload };
     default:
       return state;
   }

@@ -66,10 +66,9 @@ export const Player = () => {
                   onChange={(e) => seekTo(Number(e.target.value))}
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                 />
-                <div 
+                <div
                   className="absolute top-1/2 -translate-y-1/2 w-4 h-4 bg-white rounded-full shadow-lg shadow-purple-500/50 opacity-0 transition-opacity duration-200"
                   style={{ left: `calc(${state.progress}% - 8px)` }}
-                  onMouseEnter={() => {}}
                 />
               </div>
             </div>

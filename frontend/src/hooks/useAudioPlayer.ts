@@ -1,11 +1,17 @@
 import { useRef, useEffect, useCallback } from 'react';
 import { usePlayer } from '../store/playerStore';
 
+const EQ_FREQUENCIES = [60, 230, 910, 4000, 14000];
+const bandValueToGainDb = (value: number): number => ((value - 50) / 50) * 12;
+
 export const useAudioPlayer = () => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const blobUrlRef = useRef<string | null>(null);
   const prevSongIdRef = useRef<string | null>(null);
   const wasPlayingRef = useRef<boolean>(false);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
+  const filterNodesRef = useRef<BiquadFilterNode[]>([]);
   const { state, dispatch } = usePlayer();
 
   // 清理 Blob URL
@@ -16,13 +22,46 @@ export const useAudioPlayer = () => {
     }
   }, []);
 
-  // 音频加载和自动播放
-  useEffect(() => {
+  // 懒构造 audio + 均衡器滤波链：source → 5 个 peaking filter → destination
+  const ensureAudioGraph = useCallback(() => {
     if (!audioRef.current) {
       audioRef.current = new Audio();
     }
+    if (audioContextRef.current || typeof window === 'undefined') {
+      return;
+    }
+    const Ctx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!Ctx) return;
 
+    const ctx: AudioContext = new Ctx();
+    const source = ctx.createMediaElementSource(audioRef.current);
+    const filters = EQ_FREQUENCIES.map(freq => {
+      const f = ctx.createBiquadFilter();
+      f.type = 'peaking';
+      f.frequency.value = freq;
+      f.Q.value = 1;
+      f.gain.value = 0;
+      return f;
+    });
+
+    // 串联：source -> f0 -> f1 -> ... -> destination
+    source.connect(filters[0]);
+    for (let i = 0; i < filters.length - 1; i++) {
+      filters[i].connect(filters[i + 1]);
+    }
+    filters[filters.length - 1].connect(ctx.destination);
+
+    audioContextRef.current = ctx;
+    sourceNodeRef.current = source;
+    filterNodesRef.current = filters;
+  }, []);
+
+  // 音频加载和自动播放
+  useEffect(() => {
+    ensureAudioGraph();
     const audio = audioRef.current;
+    if (!audio) return;
+
     const currentSong = state.currentSong;
 
     if (!currentSong) {
@@ -60,6 +99,10 @@ export const useAudioPlayer = () => {
 
           // 如果之前在播放或切换了歌曲，自动播放
           if (wasPlayingRef.current) {
+            // AudioContext 在用户交互前是 suspended，第一次播放时需要 resume
+            if (audioContextRef.current?.state === 'suspended') {
+              audioContextRef.current.resume().catch(() => {});
+            }
             audio.play().catch(err => console.error('Auto-play failed:', err));
             if (!state.isPlaying) {
               dispatch({ type: 'TOGGLE_PLAY' });
@@ -124,6 +167,18 @@ export const useAudioPlayer = () => {
     }
   }, [state.volume]);
 
+  // 同步均衡器到滤波链：关闭时所有 gain=0（peaking 0dB 等同直通）
+  useEffect(() => {
+    const filters = filterNodesRef.current;
+    if (filters.length === 0) return;
+    filters.forEach((f, i) => {
+      const gainDb = state.equalizerEnabled
+        ? bandValueToGainDb(state.equalizerBands[i] ?? 50)
+        : 0;
+      f.gain.value = gainDb;
+    });
+  }, [state.equalizerEnabled, state.equalizerBands]);
+
   // 切换到下一首
   const goToNext = useCallback(() => {
     if (!state.currentSong || state.songs.length === 0) return;
@@ -159,6 +214,10 @@ export const useAudioPlayer = () => {
   // 播放
   const play = useCallback(() => {
     if (audioRef.current && state.currentSong) {
+      // AudioContext 在用户交互前是 suspended，需要 resume 才有声音
+      if (audioContextRef.current?.state === 'suspended') {
+        audioContextRef.current.resume().catch(() => {});
+      }
       audioRef.current.play().catch(err => console.error('Play failed:', err));
       if (!state.isPlaying) {
         dispatch({ type: 'TOGGLE_PLAY' });
@@ -206,8 +265,18 @@ export const useAudioPlayer = () => {
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current.src = '';
+        // HTMLMediaElement 一旦被 createMediaElementSource 接过就永久绑定，
+        // 必须丢弃元素本身，下次 mount 时 new Audio() 重建，否则 Strict Mode
+        // 双挂载会撞 InvalidStateError。
+        audioRef.current = null;
       }
       cleanupBlobUrl();
+      if (audioContextRef.current) {
+        audioContextRef.current.close().catch(() => {});
+        audioContextRef.current = null;
+        sourceNodeRef.current = null;
+        filterNodesRef.current = [];
+      }
     };
   }, [cleanupBlobUrl]);
 

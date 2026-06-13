@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Settings2 } from 'lucide-react';
+import { usePlayer } from '../store/playerStore';
 
 const presets: Record<string, number[]> = {
   'flat': [50, 50, 50, 50, 50],
@@ -11,20 +12,29 @@ const presets: Record<string, number[]> = {
 
 const frequencyLabels = ['60Hz', '230Hz', '910Hz', '4kHz', '14kHz'];
 
+const matchPreset = (bands: number[]): string => {
+  for (const [name, values] of Object.entries(presets)) {
+    if (values.every((v, i) => v === bands[i])) return name;
+  }
+  return 'custom';
+};
+
 export const Equalizer = () => {
-  const [enabled, setEnabled] = useState(false);
-  const [frequencies, setFrequencies] = useState<number[]>(presets.flat);
-  const [currentPreset, setCurrentPreset] = useState<string>('flat');
+  const { state, dispatch } = usePlayer();
+  const enabled = state.equalizerEnabled;
+  const frequencies = state.equalizerBands;
+  const [currentPreset, setCurrentPreset] = useState<string>(() => matchPreset(state.equalizerBands));
 
   const handleFrequencyChange = (index: number, value: number) => {
     const newFrequencies = [...frequencies];
     newFrequencies[index] = value;
-    setFrequencies(newFrequencies);
-    setCurrentPreset('custom');
+    dispatch({ type: 'SET_EQUALIZER_BANDS', payload: newFrequencies });
+    setCurrentPreset(matchPreset(newFrequencies));
   };
 
   const handlePresetChange = (preset: string) => {
-    setFrequencies(presets[preset] || presets.flat);
+    const bands = presets[preset] || presets.flat;
+    dispatch({ type: 'SET_EQUALIZER_BANDS', payload: bands });
     setCurrentPreset(preset);
   };
 
@@ -36,7 +46,7 @@ export const Equalizer = () => {
           <h2 className="text-xl font-semibold text-white">音效均衡器</h2>
         </div>
         <button
-          onClick={() => setEnabled(!enabled)}
+          onClick={() => dispatch({ type: 'SET_EQUALIZER_ENABLED', payload: !enabled })}
           className={`px-3 py-1 rounded-full text-sm font-medium transition-colors ${
             enabled
               ? 'bg-primary text-white'

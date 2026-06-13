@@ -1,6 +1,6 @@
-import { ApiResponse, User, Favorite, LyricLine } from '@/types';
+import { ApiResponse, User, Favorite } from '@/types';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
 // 通用请求函数
 async function fetchApi<T>(
@@ -47,47 +47,41 @@ async function fetchApi<T>(
 
 // 认证相关 API
 export const authApi = {
-  register: (username: string, email: string, password: string) =>
+  register: (email: string, password: string) =>
     fetchApi<User>('/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ username, email, password }),
+      body: JSON.stringify({ email, password }),
     }),
-    
+
   login: (email: string, password: string) =>
     fetchApi<{ user: User; token: string }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify({ email, password }),
     }),
-    
+
   getProfile: () =>
-    fetchApi<User>('/auth/profile'),
+    fetchApi<User>('/auth/me'),
 };
 
 // 收藏相关 API
 export const favoritesApi = {
   getFavorites: () =>
     fetchApi<Favorite[]>('/favorites'),
-    
-  addFavorite: (audioId: string) =>
+
+  addFavorite: (songId: string) =>
     fetchApi<Favorite>('/favorites', {
       method: 'POST',
-      body: JSON.stringify({ audioId }),
+      body: JSON.stringify({ songId }),
     }),
-    
-  removeFavorite: (audioId: string) =>
-    fetchApi<void>(`/favorites/${audioId}`, {
+
+  removeFavorite: (songId: string) =>
+    fetchApi<void>(`/favorites/${songId}`, {
       method: 'DELETE',
     }),
 };
 
 // 歌词相关 API
 export const lyricsApi = {
-  getLyrics: (audioId: string) =>
-    fetchApi<LyricLine[]>(`/lyrics/${audioId}`),
-    
-  uploadLyrics: (audioId: string, lyrics: LyricLine[]) =>
-    fetchApi<void>(`/lyrics/${audioId}`, {
-      method: 'POST',
-      body: JSON.stringify({ lyrics }),
-    }),
+  getLyrics: (title: string) =>
+    fetchApi<{ lyrics: string }>(`/lyrics/search?q=${encodeURIComponent(title)}`),
 };
